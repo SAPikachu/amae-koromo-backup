@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>雀魂牌谱屋</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+</head>
+<body>
+
+<script src="https://unpkg.com/react@16.9.0/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@16.9.0/umd/react-dom.production.min.js"></script>
+
+<div id="root"></div>
+
+<script type="module">
+  import htm from "https://unpkg.com/htm@2.2.1?module"
+  import moment from "https://unpkg.com/moment?module"
+
+  const html = htm.bind(React.createElement);
+  
+  const { useEffect, useState } = React; 
+  
+  const DATA_ROOT = "https://d2ek5tscv4zquv.cloudfront.net/";
+  const RANK_LABELS = ["初", "士", "杰", "豪", "圣", "魂"];
+  const MODE_LABELS = {
+    16: "王座",
+    12: "玉",
+  };
+  const MODE_CHECKBOXES = Object.entries(MODE_LABELS).map(([key, label]) => ({
+    key,
+    label,
+  }));
+  
+  function fetchLiveGames() {
+    if (localStorage.liveGames) {
+      return Promise.resolve(JSON.parse(localStorage.liveGames));
+    }
+    return fetch(`${DATA_ROOT}live.json`).then(resp => resp.json()).then(x => {
+      localStorage.setItem("liveGames", JSON.stringify(x));
+      return x;
+    });
+  }
+  function fetchGameRecords(date) {
+    const dateString = moment(date).format("YYMMDD");
+    const isToday = moment(date).isSame(moment(), "day");
+    const cacheTag = `gameRecord${isToday ? "Today" : dateString}`;
+    if (isToday && (!sessionStorage.lastUpdateTimestamp || (new Date()).getTime() > parseInt(sessionStorage.lastUpdateTimestamp) + 120000)) {
+      sessionStorage.removeItem(cacheTag);
+      sessionStorage.setItem("lastUpdateTimestamp", (new Date()).getTime());
+    }
+    if (sessionStorage[cacheTag]) {
+      return Promise.resolve(JSON.parse(sessionStorage[cacheTag]));
+    }
+    return fetch(`${DATA_ROOT}records/${dateString}.json?t=${cacheTag}`).then(resp => resp.json()).then(x => {
+      try {
+        sessionStorage.setItem(cacheTag, JSON.stringify(x));
+      } catch (e) {
+        sessionStorage.clear();
+        sessionStorage.setItem(cacheTag, JSON.stringify(x));
+      }
+      return x;
+    }).catch(() => ({}));
+  }
+  function getLevelTag(levelId) {
+    const realId = levelId % 10000;
+    const majorRank = Math.floor(realId / 100);
+    const minorRank = realId % 100;
+    const label = RANK_LABELS[majorRank - 1];
+    if (majorRank === RANK_LABELS.length) {
+      return label;
+    }
+    return label + minorRank;
+  }
+  function Container({title, children, fluid = false}) {
+    return html`
+<div class="container${fluid ? "-fluid" : ""} my-5">
+  <div class="row">
+    <div class="col-sm-12">
+      ${title && html`<h2 class="mb-4">${title}</h2>`}
+      ${children}
+    </div>
+  </div>
+</div>
+`;
+  }
+  function CheckboxGroup({ items = [], checkedItems = [], groupKey = "default", handleChange = (selectedItems) => {} }) {
+    const [selectedItemKeys, setSelectedItemKeys] = useState(() => new Set(checkedItems.map(x => x.key)));
+    const setSelected = function(key, isSelected) {
+      if (isSelected && selectedItemKeys.has(key)) {
+        return;
+      }
+      if (!isSelected && !selectedItemKeys.has(key)) {
+        return;
+      }
+      const newSet = new Set(selectedItemKeys);
+      if (isSelected) {
+        newSet.add(key);
+      } else {
+        newSet.delete(key);
+      }
+      setSelectedItemKeys(newSet);
+      handleChange(items.filter(x => newSet.has(x.key)));
+    };
+    return html`
+<${React.Fragment}>
+  ${items.map(item => html`
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" id="CG_${groupKey}_${item.key}" value="${item.key}" checked="${selectedItemKeys.has(item.key)}" onChange="${(event) => setSelected(item.key, event.target.checked)}" />
+      <label class="form-check-label" for="CG_${groupKey}_${item.key}">${item.label}</label>
+    </div>
+  `)}
+<//>
+`;
+  }
+  function Alert({ className = "", type = "info", children }) {
+    const [closed, setClosed] = useState();
+    if (closed) {
+      return null;
+    }
+    return html`
+<div class="alert alert-${type} alert-dismissible fade show ${className}" role="alert">
+  ${children}
+  <button type="button" class="close" data-dismiss="alert" aria-label="Close" onClick=${(event) => { event.preventDefault(); setClosed(true); }}>
+    <span aria-hidden="true">×</span>
+  </button>
+</div>
+`;
+  }
+  function Player({ player: { nickname, level, score }, isTop }) {
+    return html`<div class="player ${isTop && "font-weight-bold"}">[${getLevelTag(level)}] ${nickname} ${score !== undefined && `[${score}]`}</div>`;
+  }
+  function LiveGameRow({ game }) {
+    return html`
+<tr>
+  <td>${MODE_LABELS[game.modeId]}</td>
+  ${game.players.map(x => html`<td><${Player} player=${x}/></td>`)}
+  <td>${moment.unix(game.startTime).format("HH:mm")}</td>
+</tr>`
+  }
+  function LiveGames() {
+    const [data, setData] = useState([]);
+    useEffect(() => {
+      setData([]);
+      fetchLiveGames().then(x => setData(x));
+    }, []);
+    return html`
+    <${Container} title="当前对局">
+      <table class="table">
+        <thead>
+          <th>等级</th>
+          <th>东</th>
+          <th>南</th>
+          <th>西</th>
+          <th>北</th>
+          <th>开始时间</th>
+        </thead>
+        <tbody>
+          ${data.map(x => html`<${LiveGameRow} game=${x}/>`)}
+        </tbody>
+      </table>
+    <//>`;
+  }
+  function GameRecordRow({ game }) {
+    const topScore = Math.max(...game.players.map(x => x.score));
+    return html`
+<tr>
+  <td>${MODE_LABELS[game.modeId]}</td>
+  ${game.players.map(x => html`<td><${Player} player=${x} isTop=${x.score === topScore} /></td>`)}
+  <td>${moment.unix(game.startTime).format("HH:mm")}</td>
+  <td>${moment.unix(game.endTime).format("HH:mm")}</td>
+  <td><a href="https://www.majsoul.com/1/?paipu=${game.uuid}" class="text-nowrap" target="_blank">牌谱</a></td>
+</tr>`
+  }
+  function DatePicker({
+    initialDate = new Date(),
+    handleChange = (date) => {},
+    className = "",
+  }) {
+    const [date, setDate] = useState(initialDate);
+    const onChange = function(event) {
+      const newDate = moment(event.target.value, "YYYY-MM-DD").toDate();
+      setDate(newDate);
+      handleChange(newDate);
+    };
+    return html`<input class="${className}" type="date" value=${moment(date).format("YYYY-MM-DD")} onChange=${onChange}/>`;
+  }
+  function GameRecords({ initialDate = new Date() }) {
+    const [data, setData] = useState([]);
+    const [date, setDate] = useState(initialDate);
+    const [searchText, setSearchText] = useState("");
+    const [selectedModes, setSelectedModes] = useState(() => new Set(MODE_CHECKBOXES.map(x => x.key)));
+    useEffect(() => {
+      setData([]);
+      fetchGameRecords(date).then(x => {
+        const ret = Object.values(x);
+        ret.sort((a, b) => b.endTime - a.endTime);
+        return ret;
+      }).then(x => setData(x));
+    }, [date]);
+    const filteredData = data.filter((x) => {
+      if (!selectedModes.has(x.modeId.toString())) {
+        return false;
+      }
+      if (searchText && !x.players.some(player => player.nickname.toLowerCase().indexOf(searchText.trim().toLowerCase()) > -1)) {
+        return false;
+      }
+      return true;
+    });
+    return html`
+      <div class="form-group row">
+        <label class="col-sm-2 col-form-label">日期</label>
+        <div class="col-sm-10">
+          <${DatePicker} className="form-control" initialDate=${initialDate} handleChange=${(x) => setDate(x)}/>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="col-sm-2 col-form-label">查找玩家</label>
+        <div class="col-sm-10">
+          <input type="text" className="form-control" value=${searchText} onChange=${(event) => setSearchText(event.target.value)}/>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="col-sm-2 col-form-label"></label>
+        <div class="col-sm-10">
+          <${CheckboxGroup} items=${MODE_CHECKBOXES} checkedItems=${MODE_CHECKBOXES} handleChange=${selected => setSelectedModes(new Set(selected.map(x => x.key)))}/>
+        </div>
+      </div>
+      
+      <table class="table table-striped">
+        <thead>
+          <th>等级</th>
+          <th>东</th>
+          <th>南</th>
+          <th>西</th>
+          <th>北</th>
+          <th>开始时间</th>
+          <th>结束时间</th>
+          <th></th>
+        </thead>
+        <tbody>
+          ${filteredData.map(x => html`<${GameRecordRow} key=${x.uuid} game=${x}/>`)}
+        </tbody>
+      </table>`;
+  }
+  function App() {
+    return html`
+<${Container}>
+  <h1>雀魂牌谱屋</h1>
+<//>
+<${Container}>
+  <${Alert}>
+    <h4>说明</h4>
+    <ul>
+      <li>本页面由第三方维护，与雀魂官方无关</li>
+      <li>记录包含雀魂国服四人半庄段位战玉之间及王座之间的牌谱</li>
+      <li>正常情况下全部对局都会被记录，但不排除因网络问题遗漏部分对局的情况</li>
+      <li>页面不是实时更新，一般对局会在结束后二十分钟内出现</li>
+      <li>如有问题或建议，请戳 <a href="mailto:i@sapika.ch">SAPikachu (i@sapika.ch)</a></li>
+    </ul>
+  <//>
+<//>
+<${Container} fluid=true>
+  <${GameRecords}/>
+<//>
+
+`;
+  }
+  ReactDOM.render(html`<${App}/>`, document.getElementById("root"));
+</script>
+<!-- partial -->
+  
+</body>
+</html>
