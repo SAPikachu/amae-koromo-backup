@@ -185,17 +185,26 @@
   function GameRecords({ initialDate = new Date() }) {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState([]);
+    const [pendingData, setPendingData] = useState(null);
     const [date, setDate] = useState(initialDate);
     const [searchText, setSearchText] = useState("");
     const [selectedModes, setSelectedModes] = useState(() => new Set(MODE_CHECKBOXES.map(x => x.key)));
+    if (pendingData) {
+      if (pendingData.date === date) {
+        setData(pendingData.data);
+        setLoading(false);
+      }
+      setPendingData(null);
+    }
     useEffect(() => {
       setData([]);
       setLoading(true);
+      const curDate = date;
       fetchGameRecords(date).then(x => {
         const ret = Object.values(x);
         ret.sort((a, b) => b.endTime - a.endTime);
         return ret;
-      }).then(x => setData(x)).finally(() => setLoading(false));
+      }).then(x => setPendingData({ data: x, date: curDate }));
     }, [date]);
     const filteredData = data.filter((x) => {
       if (!selectedModes.has(x.modeId.toString())) {
