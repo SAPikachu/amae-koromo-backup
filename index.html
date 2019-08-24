@@ -183,17 +183,19 @@
     return html`<input class="${className}" type="date" value=${moment(date).format("YYYY-MM-DD")} onChange=${onChange}/>`;
   }
   function GameRecords({ initialDate = new Date() }) {
+    const [loading, setLoading] = useState(true);
     const [data, setData] = useState([]);
     const [date, setDate] = useState(initialDate);
     const [searchText, setSearchText] = useState("");
     const [selectedModes, setSelectedModes] = useState(() => new Set(MODE_CHECKBOXES.map(x => x.key)));
     useEffect(() => {
       setData([]);
+      setLoading(true);
       fetchGameRecords(date).then(x => {
         const ret = Object.values(x);
         ret.sort((a, b) => b.endTime - a.endTime);
         return ret;
-      }).then(x => setData(x));
+      }).then(x => setData(x)).finally(() => setLoading(false));
     }, [date]);
     const filteredData = data.filter((x) => {
       if (!selectedModes.has(x.modeId.toString())) {
@@ -238,7 +240,9 @@
         <tbody>
           ${filteredData.map(x => html`<${GameRecordRow} key=${x.uuid} game=${x}/>`)}
         </tbody>
-      </table>`;
+      </table>
+      ${loading && html`<p class="text-center">加载中...</p>`}
+      `;
   }
   function App() {
     return html`
