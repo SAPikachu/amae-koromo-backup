@@ -172,7 +172,11 @@
     return html`
 <tr>
   <td>${MODE_LABELS[game.modeId]}</td>
-  ${game.players.map(x => html`<td><${Player} player=${x} isTop=${x.score === topScore} /></td>`)}
+  <td>
+    <div class="row no-gutters">
+      ${game.players.map(x => html`<div class="col-6"><${Player} player=${x} isTop=${x.score === topScore} /></div>`)}
+    </div>
+  </td>
   <td>${moment.unix(game.startTime).format("HH:mm")}</td>
   <td>${moment.unix(game.endTime).format("HH:mm")}</td>
   <td><a href="https://www.majsoul.com/1/?paipu=${game.uuid}" class="text-nowrap" target="_blank">牌谱</a></td>
@@ -246,14 +250,11 @@
       </div>
       
       <table class="table table-striped">
-        <thead>
+        <thead class="text-nowrap">
           <th>等级</th>
-          <th>东</th>
-          <th>南</th>
-          <th>西</th>
-          <th>北</th>
-          <th>开始时间</th>
-          <th>结束时间</th>
+          <th>玩家</th>
+          <th>开始</th>
+          <th>结束</th>
           <th></th>
         </thead>
         <tbody>
@@ -280,7 +281,7 @@
     </ul>
   <//>
 <//>
-<${Container} fluid=true>
+<${Container}>
   <${GameRecords}/>
 <//>
 
