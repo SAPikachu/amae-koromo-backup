@@ -22,7 +22,6 @@
 <div id="root"></div>
 
 <script type="module">
-
   const html = htm.bind(React.createElement);
   
   const { useEffect, useState } = React; 
@@ -38,15 +37,6 @@
     label,
   }));
   
-  function fetchLiveGames() {
-    if (localStorage.liveGames) {
-      return Promise.resolve(JSON.parse(localStorage.liveGames));
-    }
-    return fetch(`${DATA_ROOT}live.json`).then(resp => resp.json()).then(x => {
-      localStorage.setItem("liveGames", JSON.stringify(x));
-      return x;
-    });
-  }
   function fetchGameRecords(date) {
     const dateString = moment(date).format("YYMMDD");
     const isToday = moment(date).isSame(moment(), "day");
@@ -78,8 +68,7 @@
     }
     return label + minorRank;
   }
-  function Container({title, children, fluid = false}) {
-    return html`
+  const Container = ({title, children, fluid = false}) => html`
 <div class="container${fluid ? "-fluid" : ""} my-5">
   <div class="row">
     <div class="col-sm-12">
@@ -89,8 +78,28 @@
   </div>
 </div>
 `;
+  const FormRow = ({title = "", children}) => html`
+<div class="form-group row">
+  <label class="col-sm-2 col-form-label">${title}</label>
+  <div class="col-sm-10">
+    ${children}
+  </div>
+</div>
+`;
+  function Table({headers, children}) {
+    if (typeof headers === "string") {
+      headers = headers.split(",");
+    }
+    return html`
+<table class="table table-striped">
+  ${ headers && html`<thead class="text-nowrap">${headers.map((x) => html`<th key="${x}">${x}</th>`)}</thead>`}
+  <tbody>
+    ${children}
+  </tbody>
+</table>
+`;
   }
-  function CheckboxGroup({ items = [], checkedItems = [], groupKey = "default", handleChange = (selectedItems) => {} }) {
+  function CheckboxGroup({ items = [], checkedItems = [], groupKey = "default", onChange = (selectedItems) => {} }) {
     const [selectedItemKeys, setSelectedItemKeys] = useState(() => new Set(checkedItems.map(x => x.key)));
     const setSelected = function(key, isSelected) {
       if (isSelected && selectedItemKeys.has(key)) {
@@ -106,12 +115,12 @@
         newSet.delete(key);
       }
       setSelectedItemKeys(newSet);
-      handleChange(items.filter(x => newSet.has(x.key)));
+      onChange(items.filter(x => newSet.has(x.key)));
     };
     return html`
 <${React.Fragment}>
   ${items.map(item => html`
-    <div class="form-check form-check-inline">
+    <div class="form-check form-check-inline" key="${item.key}">
       <input class="form-check-input" type="checkbox" id="CG_${groupKey}_${item.key}" value="${item.key}" checked="${selectedItemKeys.has(item.key)}" onChange="${(event) => setSelected(item.key, event.target.checked)}" />
       <label class="form-check-label" for="CG_${groupKey}_${item.key}">${item.label}</label>
     </div>
@@ -119,53 +128,45 @@
 <//>
 `;
   }
-  function Alert({ className = "", type = "info", children }) {
-    const [closed, setClosed] = useState();
+  function Alert({ className = "", type = "info", container = React.Fragment, stateName, children }) {
+    const stateKey = `alertState_${stateName}`;
+    const [closed, setClosed] = useState(() => stateName && !!localStorage.getItem(stateKey));
+    useEffect(() => {
+      if (stateName && closed) {
+        localStorage.setItem(stateKey, true);
+      }
+    }, [closed]);
     if (closed) {
       return null;
     }
+    const Cont = container;
     return html`
-<div class="alert alert-${type} alert-dismissible fade show ${className}" role="alert">
-  ${children}
-  <button type="button" class="close" data-dismiss="alert" aria-label="Close" onClick=${(event) => { event.preventDefault(); setClosed(true); }}>
-    <span aria-hidden="true">×</span>
-  </button>
-</div>
+<${Cont}>
+  <div class="alert alert-${type} alert-dismissible fade show ${className}" role="alert">
+    ${children}
+    <button type="button" class="close" data-dismiss="alert" aria-label="Close" onClick=${(event) => { event.preventDefault(); setClosed(true); }}>
+      <span aria-hidden="true">×</span>
+    </button>
+  </div>
+<//>
 `;
+  }
+  function DatePicker({
+    initialDate = new Date(),
+    onChange = (date) => {},
+    className = "",
+    min, max = moment(),
+  }) {
+    const [date, setDate] = useState(initialDate);
+    const handleChange = function(event) {
+      const newDate = moment(event.target.value, "YYYY-MM-DD").toDate();
+      setDate(newDate);
+      onChange(newDate);
+    };
+    return html`<input class="${className}" type="date" value=${moment(date).format("YYYY-MM-DD")} min=${min ? moment(min).format("YYYY-MM-DD") : undefined} max=${max ? moment(max).format("YYYY-MM-DD") : undefined} onChange=${handleChange}/>`;
   }
   function Player({ player: { nickname, level, score }, isTop }) {
     return html`<div class="player ${isTop && "font-weight-bold"}">[${getLevelTag(level)}] ${nickname} ${score !== undefined && `[${score}]`}</div>`;
-  }
-  function LiveGameRow({ game }) {
-    return html`
-<tr>
-  <td>${MODE_LABELS[game.modeId]}</td>
-  ${game.players.map(x => html`<td><${Player} player=${x}/></td>`)}
-  <td>${moment.unix(game.startTime).format("HH:mm")}</td>
-</tr>`
-  }
-  function LiveGames() {
-    const [data, setData] = useState([]);
-    useEffect(() => {
-      setData([]);
-      fetchLiveGames().then(x => setData(x));
-    }, []);
-    return html`
-    <${Container} title="当前对局">
-      <table class="table">
-        <thead>
-          <th>等级</th>
-          <th>东</th>
-          <th>南</th>
-          <th>西</th>
-          <th>北</th>
-          <th>开始时间</th>
-        </thead>
-        <tbody>
-          ${data.map(x => html`<${LiveGameRow} game=${x}/>`)}
-        </tbody>
-      </table>
-    <//>`;
   }
   function GameRecordRow({ game }) {
     const topScore = Math.max(...game.players.map(x => x.score));
@@ -174,27 +175,13 @@
   <td>${MODE_LABELS[game.modeId]}</td>
   <td>
     <div class="row no-gutters">
-      ${game.players.map(x => html`<div class="col-6"><${Player} player=${x} isTop=${x.score === topScore} /></div>`)}
+      ${game.players.map(x => html`<div key="{x.accountId}" class="col-6 pr-1"><${Player} player=${x} isTop=${x.score === topScore} /></div>`)}
     </div>
   </td>
   <td>${moment.unix(game.startTime).format("HH:mm")}</td>
   <td>${moment.unix(game.endTime).format("HH:mm")}</td>
   <td><a href="https://www.majsoul.com/1/?paipu=${game.uuid}" class="text-nowrap" target="_blank">牌谱</a></td>
 </tr>`
-  }
-  function DatePicker({
-    initialDate = new Date(),
-    handleChange = (date) => {},
-    className = "",
-    min, max = moment(),
-  }) {
-    const [date, setDate] = useState(initialDate);
-    const onChange = function(event) {
-      const newDate = moment(event.target.value, "YYYY-MM-DD").toDate();
-      setDate(newDate);
-      handleChange(newDate);
-    };
-    return html`<input class="${className}" type="date" value=${moment(date).format("YYYY-MM-DD")} min=${min ? moment(min).format("YYYY-MM-DD") : undefined} max=${max ? moment(max).format("YYYY-MM-DD") : undefined} onChange=${onChange}/>`;
   }
   function GameRecords({ initialDate = new Date() }) {
     const [loading, setLoading] = useState(true);
@@ -230,56 +217,35 @@
       return true;
     });
     return html`
-      <div class="form-group row">
-        <label class="col-sm-2 col-form-label">日期</label>
-        <div class="col-sm-10">
-          <${DatePicker} min=${moment("2019-08-23", "YYYY-MM-DD")} className="form-control" initialDate=${initialDate} handleChange=${(x) => setDate(x)}/>
-        </div>
-      </div>
-      <div class="form-group row">
-        <label class="col-sm-2 col-form-label">查找玩家</label>
-        <div class="col-sm-10">
-          <input type="text" className="form-control" value=${searchText} onChange=${(event) => setSearchText(event.target.value)}/>
-        </div>
-      </div>
-      <div class="form-group row">
-        <label class="col-sm-2 col-form-label"></label>
-        <div class="col-sm-10">
-          <${CheckboxGroup} items=${MODE_CHECKBOXES} checkedItems=${MODE_CHECKBOXES} handleChange=${selected => setSelectedModes(new Set(selected.map(x => x.key)))}/>
-        </div>
-      </div>
-      
-      <table class="table table-striped">
-        <thead class="text-nowrap">
-          <th>等级</th>
-          <th>玩家</th>
-          <th>开始</th>
-          <th>结束</th>
-          <th></th>
-        </thead>
-        <tbody>
-          ${filteredData.map(x => html`<${GameRecordRow} key=${x.uuid} game=${x}/>`)}
-        </tbody>
-      </table>
+      <${FormRow} title="日期">
+        <${DatePicker} min=${moment("2019-08-23", "YYYY-MM-DD")} className="form-control" initialDate=${initialDate} onChange=${(x) => setDate(x)}/>
+      <//>
+      <${FormRow} title="查找玩家">
+        <input type="text" className="form-control" value=${searchText} onChange=${(event) => setSearchText(event.target.value)}/>
+      <//>
+      <${FormRow}>
+        <${CheckboxGroup} items=${MODE_CHECKBOXES} checkedItems=${MODE_CHECKBOXES} onChange=${selected => setSelectedModes(new Set(selected.map(x => x.key)))}/>
+      <//>
+      <${Table} headers="等级,玩家,开始,结束,">
+        ${filteredData.map(x => html`<${GameRecordRow} key=${x.uuid} game=${x}/>`)}
+      <//>
       ${loading && html`<p class="text-center">加载中...</p>`}
-      `;
+`;
   }
   function App() {
     return html`
 <${Container}>
   <h1>雀魂牌谱屋</h1>
 <//>
-<${Container}>
-  <${Alert}>
-    <h4>说明</h4>
-    <ul>
-      <li>本页面由第三方维护，与雀魂官方无关</li>
-      <li>记录包含雀魂国服四人半庄段位战玉之间及王座之间的牌谱</li>
-      <li>正常情况下全部对局都会被记录，但不排除因网络问题遗漏部分对局的情况</li>
-      <li>页面不是实时更新，一般对局会在结束后二十分钟内出现</li>
-      <li>如有问题或建议，请戳 <a href="mailto:i@sapika.ch">SAPikachu (i@sapika.ch)</a> 或 <a href="https://github.com/SAPikachu/amae-koromo/">提交 Issue</a></li>
-    </ul>
-  <//>
+<${Alert} container=${Container} stateName="topNote">
+  <h4>说明</h4>
+  <ul>
+    <li>本页面由第三方维护，与雀魂官方无关</li>
+    <li>记录包含雀魂国服四人半庄段位战玉之间及王座之间的牌谱</li>
+    <li>正常情况下全部对局都会被记录，但不排除因网络问题遗漏部分对局的情况</li>
+    <li>页面不是实时更新，一般对局会在结束后二十分钟内出现</li>
+    <li>如有问题或建议，请戳 <a href="mailto:i@sapika.ch">SAPikachu (i@sapika.ch)</a> 或 <a href="https://github.com/SAPikachu/amae-koromo/">提交 Issue</a></li>
+  </ul>
 <//>
 <${Container}>
   <${GameRecords}/>
@@ -289,7 +255,6 @@
   }
   ReactDOM.render(html`<${App}/>`, document.getElementById("root"));
 </script>
-<!-- partial -->
   
 </body>
 </html>
