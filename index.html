@@ -194,8 +194,9 @@
     };
     return html`<input class="${className}" type="date" value=${moment(date).format("YYYY-MM-DD")} min=${min ? moment(min).format("YYYY-MM-DD") : undefined} max=${max ? moment(max).format("YYYY-MM-DD") : undefined} onChange=${handleChange}/>`;
   }
-  function Player({ player: { nickname, level, score }, isTop }) {
-    return html`<div class="player ${isTop && "font-weight-bold"}">[${getLevelTag(level)}] ${nickname} ${score !== undefined && `[${score}]`}</div>`;
+  function Player({ player: { nickname, level, score, accountId }, game: { uuid }, isTop }) {
+    const encodeAccountId = (t) => 1358437 + (7 * t + 1117113 ^ 86216345);
+    return html`<div class="player ${isTop && "font-weight-bold"}"><a href="https://www.majsoul.com/1/?paipu=${uuid}_a${encodeAccountId(accountId)}" target="_blank">[${getLevelTag(level)}] ${nickname} ${score !== undefined && `[${score}]`}</a></div>`;
   }
   function GameRecordRow({ game }) {
     const topScore = Math.max(...game.players.map(x => x.score));
@@ -204,12 +205,11 @@
   <td>${MODE_LABELS[game.modeId]}</td>
   <td>
     <div class="row no-gutters">
-      ${game.players.map(x => html`<div key="{x.accountId}" class="col-6 pr-1"><${Player} player=${x} isTop=${x.score === topScore} /></div>`)}
+      ${game.players.map(x => html`<div key="{x.accountId}" class="col-6 pr-1"><${Player} game=${game} player=${x} isTop=${x.score === topScore} /></div>`)}
     </div>
   </td>
   <td>${moment.unix(game.startTime).format("HH:mm")}</td>
   <td>${moment.unix(game.endTime).format("HH:mm")}</td>
-  <td><a href="https://www.majsoul.com/1/?paipu=${game.uuid}" class="text-nowrap" target="_blank">牌谱</a></td>
 </tr>`
   }
   function GameRecords({ initialDate = new Date() }) {
@@ -255,7 +255,7 @@
       <${FormRow}>
         <${CheckboxGroup} items=${MODE_CHECKBOXES} checkedItems=${MODE_CHECKBOXES} onChange=${selected => setSelectedModes(new Set(selected.map(x => x.key)))}/>
       <//>
-      <${Table} headers="等级,玩家,开始,结束,">
+      <${Table} headers="等级,玩家,开始,结束">
         <${SteppingListRenderer}>
           ${filteredData.map(x => html`<${GameRecordRow} key=${x.uuid} game=${x}/>`)}
         <//>
@@ -281,7 +281,6 @@
 <${Container}>
   <${GameRecords}/>
 <//>
-
 `;
   }
   ReactDOM.render(html`<${App}/>`, document.getElementById("root"));
