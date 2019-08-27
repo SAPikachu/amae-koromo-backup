@@ -99,6 +99,35 @@
 </table>
 `;
   }
+  function SteppingListRenderer ({batchSize = 50, renderInterval = 100, children}) {
+    const [numItems, setNumItems] = useState(0);
+    useEffect(() => {
+      let timeoutToken = null;
+      if (children && children.length) {
+        let numItems = 0;
+        const count = children.length;
+        const step = () => {
+          timeoutToken = null;
+          numItems += batchSize;
+          numItems = Math.min(count, numItems);
+          setNumItems(numItems);
+          if (numItems < count) {
+            timeoutToken = setTimeout(step, renderInterval);
+          }
+        };
+        step();
+      }
+      return () => {
+        if (timeoutToken) {
+          clearTimeout(timeoutToken);
+        }
+      };
+    }, [children]);
+    if (!children || !children.length) {
+      return html`<${React.Fragment}>${children}<//>`
+    }
+    return html`<${React.Fragment}>${children.slice(0, numItems)}<//>`;
+  }
   function CheckboxGroup({ items = [], checkedItems = [], groupKey = "default", onChange = (selectedItems) => {} }) {
     const [selectedItemKeys, setSelectedItemKeys] = useState(() => new Set(checkedItems.map(x => x.key)));
     const setSelected = function(key, isSelected) {
@@ -227,7 +256,9 @@
         <${CheckboxGroup} items=${MODE_CHECKBOXES} checkedItems=${MODE_CHECKBOXES} onChange=${selected => setSelectedModes(new Set(selected.map(x => x.key)))}/>
       <//>
       <${Table} headers="等级,玩家,开始,结束,">
-        ${filteredData.map(x => html`<${GameRecordRow} key=${x.uuid} game=${x}/>`)}
+        <${SteppingListRenderer}>
+          ${filteredData.map(x => html`<${GameRecordRow} key=${x.uuid} game=${x}/>`)}
+        <//>
       <//>
       ${loading && html`<p class="text-center">加载中...</p>`}
 `;
